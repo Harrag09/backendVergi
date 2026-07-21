@@ -9,12 +9,14 @@ const multer = require('multer');
 const path = require('path');
 const app = express();
 const fs = require('fs');
+const { updateStatus } = require('./controllers/livestatsController.js');
+// const CronJob = require('cron').CronJob;
 const socketIo = require('socket.io');
 const { MongoClient } = require('mongodb');
 const { attachIO } = require('./utils/attachIO.js');
 const stockRoutes = require('./routes/stock.js');
 
-// --- CONFIGURATION CORS PROPRE ---
+// Enable CORS for the specific origin
 const allowedOrigins = [
   'https://harrag09.github.io',
   'http://localhost:3002',
@@ -44,11 +46,19 @@ app.use(cors({
   credentials: true,
 }));
 
+
+
+app.options('*', cors());
+
+
 app.use(express.json());
 app.use(cookieParser());
 
 // Connect to the database
 connectToDatabase();
+
+
+
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -61,34 +71,113 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
+
 app.post('/upload', upload.single('image'), (req, res) => {
+
+  
   res.send('File uploaded successfully !');
 });
 
+
+
+//CHANGE STATUS DE ALL USER CHAQUE 10 MIN
+// const job = new CronJob('*/10 * * * *', updateStatus);
+// job.start();
+//CHANGE STATUS DE ALL USER CHAQUE 5 MIN
+// const job = new CronJob('*/5 * * * *', updateStatus);
+
+
+
+
+
 app.get('/images', (req, res) => {
   const uploadDirectory = 'uploads/';
+
+  // Read the contents of the upload directory
   fs.readdir(uploadDirectory, (err, files) => {
     if (err) {
       return res.status(500).json({ error: 'Unable to read directory' });
     }
+
+    // Filter out only the image files
     const imageFiles = files.filter(file => {
       const extname = path.extname(file).toLowerCase();
       return extname === '.png' || extname === '.jpg' || extname === '.jpeg' || extname === '.gif';
     });
+
+    // Send the array of image file names in the response
     res.json({ images: imageFiles });
   });
 });
 
-const PORT = process.env.PORT || 8002;
+
+
+// const db = client.db('test');
+// const collection = db.collection('store');
+// const changeStream = collection.watch();
+// changeStream.on('change', async (change) => {
+//   const { documentKey ,updateDescription} = change;
+//   const response = await collection.findOne({ _id:documentKey.companyId });
+// console.log("Update : ",change);
+// });
+
+
+
+const PORT = 8002;
+
+// Start the server
+
+
 
 // Routes
 app.use('/', livestatsRoutes);
+// app.use('/', attachIO(io),authRoutes);
 app.use('/', authRoutes);
 app.use('/api', usersRoutes);
 app.use('/', stockRoutes);
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
+ 
 });
+// const io = socketIo(server, {
+//   cors: {
+//     origin: [
+//       'https://harrag09.github.io',
+//       'http://localhost:3002',
+//       'https://statistics.makseb.fr',
+//       'http://statistics.makseb.fr',
+//       'http://localhost:3001',
+//       'https://statistics.sc3makseb.universe.wf',
+//       'http://statistics.sc3makseb.universe.wf',
+//       'http://localhost:3000',
+//       'http://192.168.1.2:3001',
+//       'http://192.168.1.45:3001'
+//     ],
+//     methods: ['GET', 'POST'],
+//     credentials: true
+//   }
+// });
+// const db = client.db('statistiques');
+// const collection = db.collection('TempsReels');
+// const changeStream = collection.watch();
+// changeStream.on('change', async (change) => {
+  
+//  const { documentKey} = change;
+//  const response = await collection.findOne({ _id:documentKey._id });
+//  if(response!=null){ 
+  
+//   const aa = response;
+// console.log(`UpdateTempsReels${aa.IdCRM}`)
+//  io.emit(`UpdateTempsReels${aa.IdCRM}`, {  _id: documentKey._id}); 
+// //  io.emit(`UpdateTempsReelss`, {_id: documentKey._id, objectUpdate: response}); 
+// }
+// });
+
+
+
+
+
+
 
 module.exports = app;
