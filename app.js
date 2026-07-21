@@ -21,6 +21,8 @@ const stockRoutes = require('./routes/stock.js');
 app.use(cors({
   origin: [
     'https://harrag09.github.io',
+      'https://harrag09.github.io',
+      'https://harrag09.github.io/vallonnieres-wms/',
     'http://localhost:3002',
     'https://statistics.makseb.fr',
     'http://statistics.makseb.fr',
