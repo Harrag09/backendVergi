@@ -6,7 +6,8 @@ const {
   AjoutPalox,
   MovePalox,
   UpdatePaloxStatus,
-  SortiePalox
+  SortiePalox,
+  getStatisticsData
 } = stockController;
 
 const stockRoutes = express.Router();
@@ -16,5 +17,6 @@ stockRoutes.post("/stock/AjoutPalox", AjoutPalox);
 stockRoutes.post("/stock/MovePalox", MovePalox);
 stockRoutes.post("/stock/UpdatePaloxStatus", UpdatePaloxStatus);
 stockRoutes.post("/stock/SortiePalox", SortiePalox);
+stockRoutes.get("/stock/statistics", getStatisticsData);
 
 module.exports = stockRoutes;

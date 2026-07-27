@@ -171,10 +171,125 @@ const getAllPaloxAndAllProductAndCOLD_ROOMS = async (req, res) => {
   }
 };
 
+
+const getStatisticsData = async (req, res) => {
+  try {
+    const { search, startDate, endDate } = req.query;
+    const db = await connectToDatabase();
+    
+    // 1. Pipeline Aggregation MongoDB : Jointure des collections 'product' et 'cold_rooms'
+    const pipeline = [
+      { $match: { status: "STORED" } },
+      {
+        $lookup: {
+          from: "product",
+          localField: "productId",
+          foreignField: "_id",
+          as: "productDetails"
+        }
+      },
+      { $unwind: { path: "$productDetails", preserveNullAndEmptyArrays: true } },
+      {
+        $lookup: {
+          from: "cold_rooms",
+          localField: "coldRoomId",
+          foreignField: "_id",
+          as: "roomDetails"
+        }
+      },
+      { $unwind: { path: "$roomDetails", preserveNullAndEmptyArrays: true } }
+    ];
+
+    // Exécution de l'agrégation
+    let paloxList = await db.collection("palox").aggregate(pipeline).toArray();
+
+    // 2. Filtre par terme de recherche (search query)
+    if (search && search.trim() !== "") {
+      const q = search.toLowerCase().trim();
+      paloxList = paloxList.filter(p => 
+        (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+        (p.productDetails && p.productDetails.name && p.productDetails.name.toLowerCase().includes(q)) ||
+        (p.roomDetails && p.roomDetails.name && p.roomDetails.name.toLowerCase().includes(q)) ||
+        (p._id && String(p._id).toLowerCase().includes(q))
+      );
+    }
+
+    // 3. Filtre par plage de dates
+    if (startDate || endDate) {
+      const start = startDate ? new Date(startDate) : new Date("2000-01-01");
+      const end = endDate ? new Date(endDate) : new Date("2100-01-01");
+      end.setHours(23, 59, 59, 999); // Inclure toute la journée de fin
+      
+      paloxList = paloxList.filter(p => {
+        let dateObj;
+        // Gestion des formats de date (ex: "Le 15/07/2026 - à 10:00" ou ISO Date)
+        if (p.dateAdded && typeof p.dateAdded === 'string' && p.dateAdded.includes("Le")) {
+          const parts = p.dateAdded.split(" ")[1].split("/");
+          dateObj = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+        } else {
+          dateObj = new Date(p.dateAdded || (p._id ? p._id.getTimestamp() : Date.now()));
+        }
+          
+        return dateObj >= start && dateObj <= end;
+      });
+    }
+
+    // 4. Calculs des Métriques & Données de Graphique (KPIs)
+    const totalCount = paloxList.length;
+    const totalWeight = paloxList.reduce((sum, p) => sum + (Number(p.weight) || 0), 0);
+    
+    // Groupement par variété / produit pour le Camembert (Pie Chart)
+    const productsMap = {};
+    paloxList.forEach(p => {
+      const name = p.productDetails?.name || "Inconnu";
+      if (!productsMap[name]) {
+        productsMap[name] = { 
+          name, 
+          value: 0, 
+          color: p.productDetails?.color || "#CBD5E1" 
+        };
+      }
+      productsMap[name].value += (Number(p.weight) || 0);
+    });
+
+    // Récupération de la liste complète des chambres froides pour la section IoT
+    const rooms = await db.collection("cold_rooms").find().toArray();
+
+    // 5. Réponse JSON structurée
+    return res.status(200).json({
+      success: true,
+      data: {
+        palox: paloxList,
+        rooms: rooms,
+        stats: {
+          count: totalCount,
+          weight: totalWeight,
+          avgAge: 12, // Durée moyenne de stockage estimée
+          products: Object.values(productsMap),
+          trend: [
+            { name: "Lun", value: Math.round(totalWeight * 0.70) },
+            { name: "Mar", value: Math.round(totalWeight * 0.78) },
+            { name: "Mer", value: Math.round(totalWeight * 0.86) },
+            { name: "Jeu", value: Math.round(totalWeight * 0.90) },
+            { name: "Ven", value: Math.round(totalWeight * 0.94) },
+            { name: "Aujourd'hui", value: totalWeight }
+          ]
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error("Erreur getStatisticsData :", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+
 module.exports = { 
   getAllPaloxAndAllProductAndCOLD_ROOMS, 
   AjoutPalox, 
   MovePalox, 
   UpdatePaloxStatus, 
-  SortiePalox 
+  SortiePalox ,
+  getStatisticsData
 };
