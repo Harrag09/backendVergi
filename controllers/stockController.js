@@ -20,7 +20,9 @@ const AjoutPalox = async (req, res) => {
       fillLevel: data.fillLevel,
       status: data.status,
       dateAdded: data.dateAdded,
-      weight: data.weight
+      weight: data.weight,
+      // ASSOCIATE PALOX TO COMMAND
+      commandId: data.commandId ? new ObjectId(data.commandId) : null
     };
 
     const db = await connectToDatabase();
@@ -28,14 +30,12 @@ const AjoutPalox = async (req, res) => {
     const historyCollection = db.collection("history");
 
     const response = await paloxCollection.insertOne(newPalox);
-    
-    // CORRECTION APPORTÉE ICI
     const result = await paloxCollection.findOne({ _id: response.insertedId });
 
     const his = {
       action: "ENTRÉE",
       barcode: data.barcode,
-      desc: `Réceptionné dans ${data.roomname} [${data.location}]`,
+      desc: `Réceptionné dans ${data.roomname} [${data.location}] (Commande: ${data.commandCode || 'N/A'})`,
       userId: new ObjectId(data.userId),
       timestamp: new Date()
     };
@@ -150,19 +150,20 @@ const getAllPaloxAndAllProductAndCOLD_ROOMS = async (req, res) => {
   try {
     const db = await connectToDatabase();
     
-    const [coldRoom, history, magasin, palox, product, fournisseurs] = await Promise.all([
+    const [coldRoom, history, magasin, palox, product, fournisseurs, commandes] = await Promise.all([
       db.collection("cold_rooms").find().toArray(),
-      db.collection("history").find().sort({ timestamp: -1 }).toArray(), // On trie l'historique du plus récent au plus ancien
+      db.collection("history").find().sort({ timestamp: -1 }).toArray(),
       db.collection("magasin").find().toArray(),
-      db.collection("palox").find({ status: { $ne: "EXITED" } }).toArray(), // On évite de récupérer les palox sortis
+      db.collection("palox").find({ status: { $ne: "EXITED" } }).toArray(),
       db.collection("product").find().toArray(),
-      db.collection("fournisseurs").find().toArray()
+      db.collection("fournisseurs").find().toArray(),
+      db.collection("commandes").find({ status: "OPEN" }).toArray() // FETCH OPEN COMMANDS
     ]);
 
     return res.status(200).json({
       msg: "Données trouvées.",
       success: true,
-      data: { coldRoom, history, magasin, palox, product, fournisseurs }
+      data: { coldRoom, history, magasin, palox, product, fournisseurs, commandes }
     });
 
   } catch (err) {
@@ -284,8 +285,30 @@ const getStatisticsData = async (req, res) => {
   }
 };
 
+const CreateCommand = async (req, res) => {
+  try {
+    const { code, supplierId } = req.body;
+    const db = await connectToDatabase();
+    const commandCollection = db.collection("commandes");
 
-module.exports = { 
+    const newCommand = {
+      code: code || `CMD-${Math.floor(1000 + Math.random() * 9000)}`,
+      supplierId: supplierId || "SUP-01",
+      status: "OPEN",
+      createdAt: new Date()
+    };
+
+    const response = await commandCollection.insertOne(newCommand);
+    const result = await commandCollection.findOne({ _id: response.insertedId });
+
+    return res.status(201).json({ success: true, data: result });
+  } catch (error) {
+    console.error("Erreur CreateCommand :", error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+module.exports = {
+  CreateCommand,
   getAllPaloxAndAllProductAndCOLD_ROOMS, 
   AjoutPalox, 
   MovePalox, 

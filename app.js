@@ -4,7 +4,6 @@ const { connectToDatabase, client } = require('./config/dbConfig.js');
 const cors = require('cors');
 const livestatsRoutes = require('./routes/livestatsRoutes.js');
 const authRoutes = require('./routes/auth.js');
-const usersRoutes = require('./routes/users.js');
 const multer = require('multer');
 const path = require('path');
 const app = express();
@@ -15,6 +14,7 @@ const socketIo = require('socket.io');
 const { MongoClient } = require('mongodb');
 const { attachIO } = require('./utils/attachIO.js');
 const stockRoutes = require('./routes/stock.js');
+const userRoutes = require('./routes/userRoutes.js');
 
 // Enable CORS for the specific origin
 const allowedOrigins = [
@@ -133,7 +133,7 @@ const PORT = 8002;
 app.use('/', livestatsRoutes);
 // app.use('/', attachIO(io),authRoutes);
 app.use('/', authRoutes);
-app.use('/api', usersRoutes);
+app.use('/', userRoutes);
 app.use('/', stockRoutes);
 
 const server = app.listen(PORT, () => {
