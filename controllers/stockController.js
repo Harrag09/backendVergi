@@ -285,6 +285,62 @@ const getStatisticsData = async (req, res) => {
   }
 };
 
+const getStockData = async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const palox = await db.collection('palox').find({ status: { $ne: 'EXITED' } }).toArray();
+    return res.status(200).json({ success: true, data: { palox } });
+  } catch (error) {
+    console.error('Erreur getStockData :', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const getOperationalAlerts = async (req, res) => {
+  try {
+    const db = await connectToDatabase();
+    const threshold = Number(process.env.CAPACITY_ALERT_THRESHOLD || 0.9);
+    const [rooms, palox, telemetry] = await Promise.all([
+      db.collection('cold_rooms').find().toArray(),
+      db.collection('palox').find({ status: { $ne: 'EXITED' } }).toArray(),
+      db.collection('telemetry_readings').find().sort({ recordedAt: -1 }).limit(100).toArray(),
+    ]);
+    const alerts = [];
+    for (const room of rooms) {
+      const capacity = Number(room.capacity || room.maxCapacity || 0);
+      if (!capacity) continue;
+      const occupied = palox.filter((item) => String(item.coldRoomId) === String(room._id)).length;
+      if (occupied / capacity >= threshold) alerts.push({ type: 'capacity', severity: occupied >= capacity ? 'critical' : 'warning', roomId: String(room._id), message: `${room.name || room._id}: ${occupied}/${capacity} emplacements occupés` });
+    }
+    for (const reading of telemetry) {
+      const temperature = Number(reading.temperature);
+      const minimum = Number(reading.minTemperature);
+      const maximum = Number(reading.maxTemperature);
+      if (Number.isFinite(temperature) && ((Number.isFinite(minimum) && temperature < minimum) || (Number.isFinite(maximum) && temperature > maximum))) {
+        alerts.push({ type: 'temperature', severity: 'critical', roomId: reading.roomId ? String(reading.roomId) : undefined, message: `Température hors seuil: ${temperature}°C`, recordedAt: reading.recordedAt });
+      }
+    }
+    return res.status(200).json({ success: true, data: { alerts } });
+  } catch (error) {
+    console.error('Erreur getOperationalAlerts :', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+const recordTelemetryReading = async (req, res) => {
+  try {
+    const { roomId, temperature, humidity, minTemperature, maxTemperature, sensorId, recordedAt } = req.body;
+    if (!sensorId || !roomId || !Number.isFinite(Number(temperature))) return res.status(400).json({ success: false, msg: 'sensorId, roomId et temperature sont requis.' });
+    const db = await connectToDatabase();
+    const reading = { sensorId, roomId, temperature: Number(temperature), humidity: humidity === undefined ? undefined : Number(humidity), minTemperature: minTemperature === undefined ? undefined : Number(minTemperature), maxTemperature: maxTemperature === undefined ? undefined : Number(maxTemperature), recordedAt: recordedAt ? new Date(recordedAt) : new Date() };
+    await db.collection('telemetry_readings').insertOne(reading);
+    return res.status(201).json({ success: true, data: reading });
+  } catch (error) {
+    console.error('Erreur recordTelemetryReading :', error);
+    return res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 const CreateCommand = async (req, res) => {
   try {
     const { code, supplierId } = req.body;
@@ -314,5 +370,8 @@ module.exports = {
   MovePalox, 
   UpdatePaloxStatus, 
   SortiePalox ,
-  getStatisticsData
+  getStatisticsData,
+  getStockData,
+  getOperationalAlerts,
+  recordTelemetryReading
 };

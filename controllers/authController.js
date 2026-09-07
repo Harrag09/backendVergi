@@ -49,7 +49,18 @@ const signin = async (req, res) => {
       }
       
       const user = response;
-      const user2 = {access_token:access_token,idCRM: user.idCRM,userid:user._id,Nom:user.Nom,Setting:user.Setting}
+      const role = String(user.type || user.Role || user.role || 'employee').toLowerCase() === 'admin'
+        ? 'admin'
+        : 'employee';
+      const user2 = {
+        access_token,
+        idCRM: user.idCRM,
+        userid: user._id,
+        Nom: user.Nom,
+        Setting: user.Setting,
+        type: role,
+        role,
+      };
 
       return res.status(200).json({
         msg: "User found.",
@@ -203,6 +214,8 @@ const getUserByIDcrm = async (req, res) => {
   try {
     
     const { Nom, Login, Password, Tel, idCRM ,Prenom,Email,Address ,Setting} = req.body;
+    const requestedType = String(req.body.type || req.body.role || req.body.Role || 'employee').toLowerCase();
+    const type = requestedType === 'admin' ? 'admin' : 'employee';
     const db = await connectToDatabase();
     const collection = db.collection('user');
 
@@ -217,10 +230,10 @@ const getUserByIDcrm = async (req, res) => {
     }
         const Licence = "Enable";
 
-    const Role = "store";
+    const Role = type;
     const LastCommand = ""
     
-    const newUser = { Nom, Login, Password, Tel, idCRM, Role,Prenom,Email,Address,Licence,LastCommand,Setting,BaseName:"DefaultBase" };
+    const newUser = { Nom, Login, Password, Tel, idCRM, Role, type, Prenom,Email,Address,Licence,LastCommand,Setting,BaseName:"DefaultBase" };
     await collection.insertOne(newUser);
     const ss= await collection.findOne({ Login, idCRM});
     return res.status(200).json({
@@ -240,7 +253,7 @@ const getUserByIDcrm = async (req, res) => {
   const collection = db.collection('user');
   console.log(collection)
   try {
-    const user = await collection.find({ Role: "store" }).toArray();;
+    const user = await collection.find({ Role: "employee" }).toArray();
 
     if (!user) {
       console.log("they are no users with role store");

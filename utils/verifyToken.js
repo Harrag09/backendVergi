@@ -5,7 +5,11 @@ dotenv.config();
 
 module.exports.verifyAccessToken = async (req, res, next) => {
     try {
-        const { access_token } = req.cookies;
+        const cookieToken = req.cookies?.access_token;
+        const headerToken = req.headers.authorization?.startsWith('Bearer ')
+            ? req.headers.authorization.slice(7)
+            : null;
+        const access_token = cookieToken || headerToken;
 
         const secretKey = process.env.ACCESS_TOKEN2;
 
@@ -22,7 +26,7 @@ module.exports.verifyAccessToken = async (req, res, next) => {
             });
         } else {
             return res.status(400).json({
-                msg: "No cookie found.",
+                        msg: "No access token found.",
                 success: false
             });
         }
